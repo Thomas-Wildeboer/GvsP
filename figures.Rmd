@@ -366,7 +366,7 @@ ggsave(
 )
 ```
 
-## Mantel tests (return average p-value)
+## Mantel tests (return proportion of p-values < 0.05)
 ```{R include=FALSE}
 columns <- c("P", "Comparison", "Multicollinearity", "n", "f", "h", "E")
 pvals <- data.frame(matrix(nrow = 0, ncol = length(columns)))
@@ -762,6 +762,129 @@ ggsave(
 )
 ```
 
+## Response Differences (Adjustments by estimated heritability)
+```{R}
+ns <- c(4)
+fs <- c(500)
+hs <- c(0.5)
+multicolls <- c("low", "medium", "high")
+e_types <- c("opp", "ind", "sim")
+
+# all combinations of parameters
+params <- expand.grid(ns, fs, hs, multicolls, e_types)
+
+# build dataframe
+columns <- c("Difference", "SE", "Comparison", "Ne", "Multicollinearity", "n", "h", "E")
+rdiffs <- data.frame(matrix(nrow = 0, ncol = length(columns)))
+colnames(rdiffs) <- columns
+
+for (i in 1:nrow(params)) {
+  # read matrices
+  matrices1 <- read.csv("../matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = F)
+  matrices2 <- read.csv("../matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.1)
+  matrices3 <- read.csv("../matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.2)
+  matrices4 <- read.csv("../matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.3)
+  matrices5 <- read.csv("../matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.4)
+  matrices6 <- read.csv("../matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.5)
+  matrices7 <- read.csv("../matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.6)
+  matrices8 <- read.csv("../matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.7)
+  matrices9 <- read.csv("../matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.8)
+  matrices10 <- read.csv("../matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.9)
+  
+  a_list <- matrices1[[1]]
+  g_list <- matrices1[[2]]
+  p_list1 <- matrices1[[3]]
+  p_list2 <- matrices2[[3]]
+  p_list3 <- matrices3[[3]]
+  p_list4 <- matrices4[[3]]
+  p_list5 <- matrices5[[3]]
+  p_list6 <- matrices6[[3]]
+  p_list7 <- matrices7[[3]]
+  p_list8 <- matrices8[[3]]
+  p_list9 <- matrices9[[3]]
+  p_list10 <- matrices10[[3]]
+  
+  # get response differences
+  rd1 <- RDifferences(a_list, g_list, p_list1)
+  rd2 <- RDifferences(a_list, g_list, p_list2)
+  rd3 <- RDifferences(a_list, g_list, p_list3)
+  rd4 <- RDifferences(a_list, g_list, p_list4)
+  rd5 <- RDifferences(a_list, g_list, p_list5)
+  rd6 <- RDifferences(a_list, g_list, p_list6)
+  rd7 <- RDifferences(a_list, g_list, p_list7)
+  rd8 <- RDifferences(a_list, g_list, p_list8)
+  rd9 <- RDifferences(a_list, g_list, p_list9)
+  rd10 <- RDifferences(a_list, g_list, p_list10)
+  
+  # add to df
+  rdiffs <- rbind(rdiffs, data.frame(Difference = 100*rd1[1,1], SE = 100*rd1[1,2], Comparison = "P (not adjusted) and true G", n=params[i, 1], Ne=params[i, 2]*params[i, 3], Multicollinearity=params[i, 4], h=params[i, 3], E=params[i, 5], h_guess=1.0))
+  rdiffs <- rbind(rdiffs, data.frame(Difference = 100*rd2[1,1], SE = 100*rd2[1,2], Comparison = "P (adjusted, error=0.4) and true G", n=params[i, 1], Ne=params[i, 2]*params[i, 3], Multicollinearity=params[i, 4], h=params[i, 3], E=params[i, 5], h_guess=0.1))
+  rdiffs <- rbind(rdiffs, data.frame(Difference = 100*rd3[1,1], SE = 100*rd3[1,2], Comparison = "P (adjusted, error=0.3) and true G", n=params[i, 1], Ne=params[i, 2]*params[i, 3], Multicollinearity=params[i, 4], h=params[i, 3], E=params[i, 5], h_guess=0.2))
+  rdiffs <- rbind(rdiffs, data.frame(Difference = 100*rd4[1,1], SE = 100*rd4[1,2], Comparison = "P (adjusted, error=0.2) and true G", n=params[i, 1], Ne=params[i, 2]*params[i, 3], Multicollinearity=params[i, 4], h=params[i, 3], E=params[i, 5], h_guess=0.3))
+  rdiffs <- rbind(rdiffs, data.frame(Difference = 100*rd5[1,1], SE = 100*rd5[1,2], Comparison = "P (adjusted, error=0.1) and true G", n=params[i, 1], Ne=params[i, 2]*params[i, 3], Multicollinearity=params[i, 4], h=params[i, 3], E=params[i, 5], h_guess=0.4))
+  rdiffs <- rbind(rdiffs, data.frame(Difference = 100*rd6[1,1], SE = 100*rd6[1,2], Comparison = "P (adjusted, error=0.0) and true G", n=params[i, 1], Ne=params[i, 2]*params[i, 3], Multicollinearity=params[i, 4], h=params[i, 3], E=params[i, 5], h_guess=0.5))
+  rdiffs <- rbind(rdiffs, data.frame(Difference = 100*rd7[1,1], SE = 100*rd6[1,2], Comparison = "P (adjusted, error=-0.1) and true G", n=params[i, 1], Ne=params[i, 2]*params[i, 3], Multicollinearity=params[i, 4], h=params[i, 3], E=params[i, 5], h_guess=0.6))
+  rdiffs <- rbind(rdiffs, data.frame(Difference = 100*rd8[1,1], SE = 100*rd6[1,2], Comparison = "P (adjusted, error=-0.2) and true G", n=params[i, 1], Ne=params[i, 2]*params[i, 3], Multicollinearity=params[i, 4], h=params[i, 3], E=params[i, 5], h_guess=0.7))
+  rdiffs <- rbind(rdiffs, data.frame(Difference = 100*rd9[1,1], SE = 100*rd6[1,2], Comparison = "P (adjusted, error=-0.3) and true G", n=params[i, 1], Ne=params[i, 2]*params[i, 3], Multicollinearity=params[i, 4], h=params[i, 3], E=params[i, 5], h_guess=0.8))
+  rdiffs <- rbind(rdiffs, data.frame(Difference = 100*rd10[1,1], SE = 100*rd6[1,2], Comparison = "P (adjusted, error=-0.4) and true G", n=params[i, 1], Ne=params[i, 2]*params[i, 3], Multicollinearity=params[i, 4], h=params[i, 3], E=params[i, 5], h_guess=0.9))
+  rdiffs <- rbind(rdiffs, data.frame(Difference = 100*rd10[2,1], SE = 100*rd6[2,2], Comparison = "Ghat and true G", n=params[i, 1], Ne=params[i, 2]*params[i, 3], Multicollinearity=params[i, 4], h=params[i, 3], E=params[i, 5], h_guess=0))
+}
+
+rdiffs$E <- factor(rdiffs$E, levels = c("ind", "sim", "opp"))
+levels(rdiffs$E) <- c("Independent", "Proportional", "Opposite")
+
+rdiffs$Heritability <- as.factor(rdiffs$h)
+rdiffs$Multicollinearity <- factor(rdiffs$Multicollinearity, levels = c("low", "medium", "high"))
+rdiffs$Comparison <- factor(
+  rdiffs$Comparison,
+  levels = c(
+    "P (adjusted, error=0.4) and true G",
+    "P (adjusted, error=0.3) and true G",
+    "P (adjusted, error=0.2) and true G",
+    "P (adjusted, error=0.1) and true G",
+    "P (adjusted, error=0.0) and true G",
+    "P (adjusted, error=-0.1) and true G",
+    "P (adjusted, error=-0.2) and true G",
+    "P (adjusted, error=-0.3) and true G",
+    "P (adjusted, error=-0.4) and true G",
+    "P (not adjusted) and true G",
+  )
+)
+
+# plot data
+ggplot(data=rdiffs) +
+  geom_hline(aes(yintercept=0), colour="#000000", linewidth = 1.5) +
+  geom_point(aes(x=factor(h_guess), y=Difference, color=Comparison), cex=7) +
+  geom_errorbar(aes(x=factor(h_guess), y=Difference, ymin=Difference-(SE*1.96), ymax=Difference+(SE*1.96), color=Comparison), width=.1) +
+  labs(y = "Proportional Response Difference (%)", x = "Heritability Estimate Error (%)") +
+   scale_x_discrete(
+    limits = c("0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "1"),
+    labels = c("-80", "-60", "-40", "-20", "0", "20", "40", "60", "80", "100")
+  ) +
+  geom_hline(
+    data = subset(rdiffs, h_guess == 0),
+    aes(yintercept = Difference),
+    linetype = "dashed",
+    colour   = "black",
+    linewidth = 1.5
+  ) +
+  geom_rect(
+    data = subset(rdiffs, h_guess == 0),
+    aes(
+      xmin = -Inf, xmax = Inf,
+      ymin = Difference - 1.96 * SE,
+      ymax = Difference + 1.96 * SE
+    ),
+    fill = "black", alpha = 0.1,
+    inherit.aes = FALSE
+  ) +
+  facet_grid(E~Multicollinearity, labeller = label_both) +
+  theme_bw(base_size=30) +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank(), axis.ticks.x = element_blank(), legend.position = "none")
+
+ggsave(width = 25, height = 20, device='pdf', dpi=500, filename = "response_diff_guess_adjustments.pdf")
+```
+
 ## Disparity
 ```{r}
 columns <- c("Disparity", "SE", "Comparison", "# of Traits", "# of Families", "Heritability", "Multicollinearity", "E Type")
@@ -968,4 +1091,41 @@ regression_results <- comparison_df %>%
   ungroup()
 
 write.csv(regression_results, "regression_results.csv", row.names = FALSE)
+```
+
+## Error proportion
+```{r}
+# build dataframe
+columns <- c("Ratio", "SE", "Comparison", "# of Traits", "# of Families", "Heritability", "Multicollinearity", "E Type")
+ratiodf <- data.frame(matrix(nrow = 0, ncol = length(columns)))
+colnames(ratiodf) <- columns
+
+for (i in 1:nrow(params)) {
+  matrices <- matrices_csv %>%
+    filter(
+      n == params$n[i],
+      f == params$f[i],
+      multicoll == params$multicoll[i],
+      h == params$h[i],
+      e_type == params$e_type[i]
+    ) %>%
+    read_matrices(cor = TRUE)
+  
+  a_matrices <- matrices[[1]]
+  g_matrices <- matrices[[2]]
+  p_matrices <- matrices[[3]]
+  
+  # norm of differences between Ghat and true G matrices (Frobenius norm)
+  map2_dbl(p_list, a_list, ~frobenius.norm(.x - .y)) -> p_diff
+  map2_dbl(g_list, a_list, ~frobenius.norm(.x - .y)) -> g_diff
+  
+  ratios <- round(g_diff / p_diff, 2)
+  mean_ratio <- mean(ratios)
+  se_ratio <- sd(ratios) / sqrt(length(ratios))
+  
+  # add to df
+  ratiodf <- rbind(ratiodf, data.frame(Ratio = mean_ratio, SE = se_ratio, Comparison = "F_G/F_P", `# of Traits` = params$n[i], `# of Families` = params$f[i], Heritability = params$h[i], Multicollinearity = params$multicoll[i], `E Type`=params$e_type[i]))
+}
+
+write.csv(ratiodf, "estimation_error_proportion.csv", row.names = FALSE)
 ```

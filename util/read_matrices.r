@@ -1,7 +1,7 @@
 # Inputs CSV file of matrices from matrixsim.r and optional heritability for scaling
 # Outputs R list of A, G, and P matrices for convenience
 
-`read_matrices` <- function(matrices_csv, scale_p=FALSE, h, cor=FALSE) {
+`read_matrices` <- function(matrices_csv, scale_p, h, cor=FALSE) {
   a_list <- list()
   g_list <- list()
   p_list <- list()
@@ -18,7 +18,6 @@
     p <- matrix(as.numeric(p), nrow=dim, ncol=dim)
     
     if (cor == TRUE) {
-      # convert to correlation matrices
       a <- cov2cor(a)
       g <- cov2cor(g)
       p <- cov2cor(p)

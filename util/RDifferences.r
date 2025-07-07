@@ -1,5 +1,4 @@
-# Response Distances between matrices (Hansen and Houle 2008)
-
+# Response Distance from Hansen and Houle (2008)
 library(evolvability)
 library(purrr)
 
@@ -8,7 +7,8 @@ ResponseDifference <- function(A, X, i=1000) {
     betas <- randomBeta(n=i, k=dim(X)[1])
 
     # get differences between response vectors from A and X
-    differences <- map_dbl(1:i, ~norm((X-A) %*% betas[, .x]))
+    differences <- map_dbl(1:i, ~((norm((X-A) %*% betas[, .x]))/
+                            norm(A %*% betas[, .x])))
 
     return(mean(differences))
 }
