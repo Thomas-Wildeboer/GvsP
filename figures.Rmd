@@ -8,6 +8,9 @@ library(evolvability)
 library(evolqg)
 library(here)
 library(reshape2)
+library(ggh4x)
+library(ggrastr)
+library(matrixcalc)
 
 # utils (read matrices as lists, perform tests on each pair of matrices from lists)
 source('./util/read_matrices.r')
@@ -20,36 +23,35 @@ source('./util/AvgEvolvabilities.r')
 source('./util/MaxEvolvabilities.r')
 source('./util/Disparity.r')
 source('./util/MantelTests.r')
+source('./util/Cosines.r')
 
 # return upper triangle of matrix (include diag)
 uppertriang <- function(x) {
   x[upper.tri(x, diag = TRUE)]
 }
 
+# read in matrices csv
+matrices_csv <- read.csv("small_families_matrices.csv")
+
 # parameter combinations (adjust these to produce particular figures)
-ns <- c(4) # options: 4, 8, 12
-fs <- c(50, 150, 500) # options: 50, 150, 500
+ns <- c(8) # options: 4, 8, 12
+fs <- c(20, 60, 200) # options: large families = {50, 150, 500}, small families = {20, 60, 200}
 hs <- c(0.1, 0.5) # options: 0.1, 0.5
 multicolls <- c("low", "medium", "high") # options: low, medium, high
 e_types <- c("ind", "sim", "opp") # options: ind, sim, opp
 
 params <- expand.grid(n = ns, f = fs, h = hs, multicoll = multicolls, e_type = e_types)
 
-adjust_p <- TRUE # whether or not to adjust P matrices by heritability for relevant analyses
-
-# read in matrices csv
-matrices_csv <- read.csv("matrices.csv")
+adjust_p <- F # whether or not to adjust P matrices by heritability for relevant analyses (Ghat = h^2 .* P)
 ```
 
 ## Relative average evolvabilities
 ```{R}
 # NOTE: change the h parameter in read_matrices() to scale P matrices by a different heritability value, e.g. h = 0.35
 
-columns <- c("RelAvgEvolvability", "SE", "Ratio", "Ne", "Multicollinearity", "n", "h", "E")
+columns <- c("RelAvgEvolvability", "SE", "Ratio", "f", "Multicollinearity", "n", "h", "E")
 evolvs <- data.frame(matrix(nrow = 0, ncol = length(columns)))
 colnames(evolvs) <- columns
-
-dodge <- position_dodge(0.6)
 
 for (i in seq_len(nrow(params))) {
   matrices <- matrices_csv %>%
@@ -75,7 +77,7 @@ for (i in seq_len(nrow(params))) {
       SE = evolv[1, 2],
       Ratio = "P to true G",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -85,7 +87,7 @@ for (i in seq_len(nrow(params))) {
       SE = evolv[2, 2],
       Ratio = "Estimated G to true G",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -95,7 +97,7 @@ for (i in seq_len(nrow(params))) {
       SE = evolv[3, 2],
       Ratio = "Estimated G to P",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -107,47 +109,45 @@ evolvs$E <- factor(evolvs$E, levels = c("ind", "sim", "opp"))
 levels(evolvs$E) <- c("Independent", "Proportional", "Opposite")
 evolvs$Heritability <- as.factor(evolvs$h)
 
+dodge <- position_dodge(width = 0.15)
+
 ggplot(data = evolvs) +
-  geom_hline(aes(yintercept = 1), colour = "#000000") +
+  geom_hline(aes(yintercept = 1), colour = "#000000", linetype="dashed") +
   geom_point(
     aes(
-      x = factor(Ne),
+      x = as.factor(f),
       y = RelAvgEvolvability,
       color = Ratio,
       shape = Heritability
     ),
-    position = dodge, cex = 5
+    position = dodge, cex = 2, alpha=0.9
   ) +
   geom_errorbar(
-    aes(
-      x = factor(Ne),
+   aes(
+      x = factor(f),
       y = RelAvgEvolvability,
       ymin = RelAvgEvolvability - (SE * 1.96),
       ymax = RelAvgEvolvability + (SE * 1.96),
       color = Ratio
     ),
-    width = 0.2,
-    position = dodge
+    width = 0.2, position = dodge, alpha=0.9
   ) +
-  labs(y = "Relative Average Evolvability", x = "Effective Sample Size") +
-  facet_grid(E ~ Multicollinearity, labeller = label_both) +
-  scale_x_discrete(labels = c(5, 15, 25, 50, 75, 250)) +
-  geom_vline(
-    xintercept = c(1.5, 2.5, 3.5, 4.5, 5.5),
-    linetype = "dashed",
-    color = "grey50"
-  ) +
-  theme_bw(base_size = 25) +
+  labs(y = "Relative Average Evolvability", x = "Number of Families") +
+  facet_nested(E ~ Multicollinearity + h, labeller = label_both) +
+  scale_x_discrete(labels = c(50, 150, 500)) +
+  theme_bw(base_size = 14) +
   theme(
+    panel.spacing=unit(0, "lines"),
+    panel.border=element_rect(color="grey10"),
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
     axis.ticks.x = element_blank()
   )
 
 ggsave(
-  width = 25, height = 20,
+  width = 10, height = 6,
   device = 'pdf', dpi = 500,
-  filename = "average_evolvabilities.pdf"
+  filename = "avg_evolv_E_n8_adjusted.pdf"
 )
 ```
 
@@ -155,11 +155,9 @@ ggsave(
 ```{R}
 # NOTE: change the h parameter in read_matrices() to scale P matrices by a different heritability value, e.g. h = 0.35
 
-columns <- c("RelMaxEvolvability", "SE", "Ratio", "Ne", "Multicollinearity", "n", "h", "E")
+columns <- c("RelMaxEvolvability", "SE", "Ratio", "f", "Multicollinearity", "n", "h", "E")
 evolvs <- data.frame(matrix(nrow = 0, ncol = length(columns)))
 colnames(evolvs) <- columns
-
-dodge <- position_dodge(0.6)
 
 for (i in seq_len(nrow(params))) {
   matrices <- matrices_csv %>%
@@ -185,7 +183,7 @@ for (i in seq_len(nrow(params))) {
       SE = evolv[1, 2],
       Ratio = "P to true G",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -195,7 +193,7 @@ for (i in seq_len(nrow(params))) {
       SE = evolv[2, 2],
       Ratio = "Estimated G to true G",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -205,7 +203,7 @@ for (i in seq_len(nrow(params))) {
       SE = evolv[3, 2],
       Ratio = "Estimated G to P",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -217,59 +215,55 @@ evolvs$E <- factor(evolvs$E, levels = c("ind", "sim", "opp"))
 levels(evolvs$E) <- c("Independent", "Proportional", "Opposite")
 evolvs$Heritability <- as.factor(evolvs$h)
 
+dodge <- position_dodge(width = 0.15)
+
 ggplot(data = evolvs) +
-  geom_hline(aes(yintercept = 1), colour = "#000000") +
+  geom_hline(aes(yintercept = 1), colour = "#000000", linetype="dashed") +
   geom_point(
     aes(
-      x = factor(Ne),
+      x = as.factor(f),
       y = RelMaxEvolvability,
       color = Ratio,
       shape = Heritability
     ),
-    position = dodge, cex = 5
+    position = dodge, cex = 2, alpha=0.9
   ) +
   geom_errorbar(
-    aes(
-      x = factor(Ne),
+   aes(
+      x = factor(f),
       y = RelMaxEvolvability,
       ymin = RelMaxEvolvability - (SE * 1.96),
       ymax = RelMaxEvolvability + (SE * 1.96),
       color = Ratio
     ),
-    width = 0.2,
-    position = dodge
+    width = 0.2, position = dodge, alpha=0.9
   ) +
-  labs(y = "Relative Maximum Evolvability", x = "Effective Sample Size") +
-  facet_grid(E ~ Multicollinearity, labeller = label_both) +
-  scale_x_discrete(labels = c(5, 15, 25, 50, 75, 250)) +
-  geom_vline(
-    xintercept = c(1.5, 2.5, 3.5, 4.5, 5.5),
-    linetype = "dashed",
-    color = "grey50"
-  ) +
-  theme_bw(base_size = 25) +
+  labs(y = "Relative Maximum Evolvability", x = "Number of Families") +
+  facet_nested(n ~ Multicollinearity + h, labeller = label_both) +
+  scale_x_discrete(labels = c(20, 60, 200)) +
+  theme_bw(base_size = 14) +
   theme(
+    panel.spacing=unit(0, "lines"),
+    panel.border=element_rect(color="grey10"),
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
     axis.ticks.x = element_blank()
   )
 
 ggsave(
-  width = 25, height = 20,
+  width = 10, height = 6,
   device = 'pdf', dpi = 500,
-  filename = "maximum_evolvabilities.pdf"
+  filename = "max_evolv_n_unadjusted.pdf"
 )
 ```
 
 ## Krzanowski's Common Subspaces Similarities
 ```{R}
-# n = 8 used for this figure
+# n = 8 used for figures where E varies
 
-columns <- c("Correlation", "SE", "Comparison", "Ne", "Multicollinearity", "n", "h", "E")
+columns <- c("Correlation", "SE", "Comparison", "f", "Multicollinearity", "n", "h", "E")
 krzcors <- data.frame(matrix(nrow = 0, ncol = length(columns)))
 colnames(krzcors) <- columns
-
-dodge <- position_dodge(0.6)
 
 for (i in seq_len(nrow(params))) {
   matrices <- matrices_csv %>%
@@ -295,7 +289,7 @@ for (i in seq_len(nrow(params))) {
       SE = krzcor[1, 2],
       Comparison = "P and true G",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -305,7 +299,7 @@ for (i in seq_len(nrow(params))) {
       SE = krzcor[2, 2],
       Comparison = "Estimated G and true G",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -315,7 +309,7 @@ for (i in seq_len(nrow(params))) {
       SE = krzcor[3, 2],
       Comparison = "Estimated G and P",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -328,47 +322,45 @@ levels(krzcors$E) <- c("Independent", "Proportional", "Opposite")
 krzcors$Heritability <- as.factor(krzcors$h)
 krzcors$Multicollinearity <- factor(krzcors$Multicollinearity, levels = c("low", "medium", "high"))
 
+dodge <- position_dodge(width = 0.15)
+
 ggplot(data = krzcors) +
   geom_point(
     aes(
-      x = factor(Ne),
+      x = as.factor(f),
       y = Correlation,
       color = Comparison,
       shape = Heritability
     ),
-    position = dodge, cex = 5
+    position = dodge, cex = 2, alpha=0.9
   ) +
   geom_errorbar(
-    aes(
-      x = factor(Ne),
+   aes(
+      x = factor(f),
       y = Correlation,
       ymin = Correlation - (SE * 1.96),
       ymax = Correlation + (SE * 1.96),
       color = Comparison
     ),
-    width = 0.2,
-    position = dodge
+    width = 0.2, position = dodge, alpha=0.9
   ) +
-  labs(y = "Common Subspace Correlation", x = "Effective Sample Size") +
-  facet_grid(E ~ Multicollinearity, labeller = label_both) +
+  labs(y = "Common Subspace Correlation", x = "Number of Families") +
+  facet_nested(E ~ Multicollinearity + h, labeller = label_both) +
   ylim(0.0, 1.0) +
-  scale_x_discrete(labels = c(5, 15, 25, 50, 75, 250)) +
-  geom_vline(
-    xintercept = c(1.5, 2.5, 3.5, 4.5, 5.5),
-    linetype = "dashed",
-    color = "grey50"
-  ) +
-  theme_bw(base_size = 24) +
+  scale_x_discrete(labels = c(50, 150, 500)) +
+  theme_bw(base_size = 14) +
   theme(
+    panel.spacing=unit(0, "lines"),
+    panel.border=element_rect(color="grey10"),
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
     axis.ticks.x = element_blank()
   )
 
 ggsave(
-  width = 25, height = 20,
+  width = 10, height = 6,
   device = 'pdf', dpi = 500,
-  filename = "common_subspace_similarities.pdf"
+  filename = "krz_first_E_n8.pdf"
 )
 ```
 
@@ -431,16 +423,14 @@ for (i in seq_len(nrow(params))) {
 pvals$E <- factor(pvals$E, levels = c("ind", "sim", "opp"))
 levels(pvals$E) <- c("Independent", "Proportional", "Opposite")
 
-write.csv(pvals, "mantel_tests.csv", row.names = FALSE)
+write.csv(pvals, "mantel_tests_n4_E_large_fam.csv", row.names = FALSE)
 ```
 
 ## Mantel cors (Pearson matrix correlations)
 ```{R include=FALSE}
-columns <- c("Correlation", "SE", "Comparison", "Ne", "Multicollinearity", "n", "h", "E")
+columns <- c("Correlation", "SE", "Comparison", "f", "Multicollinearity", "n", "h", "E")
 mantelcors <- data.frame(matrix(nrow = 0, ncol = length(columns)))
 colnames(mantelcors) <- columns
-
-dodge <- position_dodge(0.6)
 
 for (i in seq_len(nrow(params))) {
   matrices <- matrices_csv %>%
@@ -466,7 +456,7 @@ for (i in seq_len(nrow(params))) {
       SE = mantelcor[1, 2],
       Comparison = "P and true G",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -476,7 +466,7 @@ for (i in seq_len(nrow(params))) {
       SE = mantelcor[2, 2],
       Comparison = "Estimated G and true G",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -486,7 +476,7 @@ for (i in seq_len(nrow(params))) {
       SE = mantelcor[3, 2],
       Comparison = "Estimated G and P",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -499,53 +489,44 @@ levels(mantelcors$E) <- c("Independent", "Proportional", "Opposite")
 mantelcors$Heritability <- as.factor(mantelcors$h)
 mantelcors$Multicollinearity <- factor(mantelcors$Multicollinearity, levels = c("low", "medium", "high"))
 
+dodge <- position_dodge(width = 0.15)
+
 ggplot(data = mantelcors) +
   geom_point(
     aes(
-      x = factor(Ne),
+      x = as.factor(f),
       y = Correlation,
       color = Comparison,
       shape = Heritability
     ),
-    position = dodge, cex = 5
+    position = dodge, cex = 2, alpha=0.9
   ) +
   geom_errorbar(
     aes(
-      x = factor(Ne),
+      x = as.factor(f),
       y = Correlation,
-      ymin = Correlation - SE * 1.96,
-      ymax = Correlation + SE * 1.96,
+      ymin = Correlation - (SE * 1.96),
+      ymax = Correlation + (SE * 1.96),
       color = Comparison
     ),
-    width = 0.2,
-    position = dodge
+    width = 0.2, position = dodge, alpha=0.9
   ) +
-  labs(y = "Correlation", x = "Effective Sample Size") +
-  facet_grid(E ~ Multicollinearity, labeller = label_both) +
-  ylim(-1, 1) +
-  scale_x_discrete(labels = c(5, 15, 25, 50, 75, 250)) +
-  geom_vline(
-    xintercept = c(1.5, 2.5, 4.5, 5.5),
-    linetype = "dashed",
-    color = "grey50"
-  ) +
-  geom_vline(
-    xintercept = 3.5,
-    linetype = "dashed",
-    color = "hotpink",
-    linewidth = 1.2
-  ) +
-  theme_bw(base_size = 24) +
+  labs(y = "Pearson Correlation", x = "Number of Families") +
+  facet_nested(n ~ Multicollinearity + h, labeller = label_both) +
+  scale_x_discrete(labels = c(50, 150, 500)) +
+  theme_bw(base_size = 14) +
   theme(
+    panel.spacing=unit(0, "lines"),
+    panel.border=element_rect(color="grey10"),
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
     axis.ticks.x = element_blank()
   )
 
 ggsave(
-  width = 25, height = 20,
+  width = 10, height = 6,
   device = 'pdf', dpi = 500,
-  filename = "mantel_cors.pdf"
+  filename = "mantel_cors_n4_E.pdf"
 )
 ```
 
@@ -554,8 +535,6 @@ ggsave(
 columns <- c("Correlation", "SE", "Comparison", "Ne", "Multicollinearity", "n", "h", "E")
 skewercors <- data.frame(matrix(nrow = 0, ncol = length(columns)))
 colnames(skewercors) <- columns
-
-dodge <- position_dodge(0.6)
 
 for (i in seq_len(nrow(params))) {
   matrices <- matrices_csv %>%
@@ -566,7 +545,7 @@ for (i in seq_len(nrow(params))) {
       h == params[i, 3],
       e_type == params[i, 5]
     ) %>%
-    read_matrices(scale_p = FALSE, h = params[i, 3])
+    read_matrices(scale_p = F, h = params[i, 3])
   
   a_list <- matrices[[1]]
   g_list <- matrices[[2]]
@@ -581,7 +560,7 @@ for (i in seq_len(nrow(params))) {
       SE = skewercor[1, 2],
       Comparison = "P and true G",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -591,7 +570,7 @@ for (i in seq_len(nrow(params))) {
       SE = skewercor[2, 2],
       Comparison = "Estimated G and true G",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -601,7 +580,7 @@ for (i in seq_len(nrow(params))) {
       SE = skewercor[3, 2],
       Comparison = "Estimated G and P",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -614,58 +593,52 @@ levels(skewercors$E) <- c("Independent", "Proportional", "Opposite")
 skewercors$Heritability <- as.factor(skewercors$h)
 skewercors$Multicollinearity <- factor(skewercors$Multicollinearity, levels = c("low", "medium", "high"))
 
+dodge <- position_dodge(width = 0.15)
+
 ggplot(data = skewercors) +
   geom_point(
     aes(
-      x = factor(Ne),
+      x = as.factor(f),
       y = Correlation,
       color = Comparison,
       shape = Heritability
     ),
-    position = dodge, cex = 5
+    position = dodge, cex = 2, alpha=0.9
   ) +
   geom_errorbar(
     aes(
-      x = factor(Ne),
+      x = as.factor(f),
       y = Correlation,
       ymin = Correlation - (SE * 1.96),
       ymax = Correlation + (SE * 1.96),
       color = Comparison
     ),
-    width = 0.2,
-    position = dodge
+    width = 0.2, position = dodge, alpha=0.9
   ) +
-  labs(y = "Random Skewer Correlation", x = "Effective Sample Size") +
-  facet_grid(E ~ Multicollinearity, labeller = label_both) +
-  ylim(0.3, 1) +
-  theme_bw(base_size = 20) +
-  scale_x_discrete(labels = c(5, 15, 25, 50, 75, 250)) +
-  geom_vline(
-    xintercept = c(1.5, 2.5, 3.5, 4.5, 5.5),
-    linetype = "dashed",
-    color = "grey50"
-  ) +
-  theme_bw(base_size = 24) +
+  labs(y = "Random Skewer Correlation", x = "Number of Families") +
+  facet_nested(E ~ Multicollinearity + h, labeller = label_both) +
+  scale_x_discrete(labels = c(50, 150, 500)) +
+  theme_bw(base_size = 14) +
   theme(
+    panel.spacing=unit(0, "lines"),
+    panel.border=element_rect(color="grey10"),
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
     axis.ticks.x = element_blank()
   )
 
 ggsave(
-  width = 25, height = 20,
+  width = 10, height = 6,
   device = 'pdf', dpi = 500,
-  filename = "random_skewers.pdf"
+  filename = "random_skewers_E_n4.pdf"
 )
 ```
 
 ## Response Differences
 ```{R}
-columns <- c("Difference", "SE", "Comparison", "Ne", "Multicollinearity", "n", "h", "E")
+columns <- c("Difference", "SE", "Comparison", "f", "Multicollinearity", "n", "h", "E")
 rdiffs <- data.frame(matrix(nrow = 0, ncol = length(columns)))
 colnames(rdiffs) <- columns
-
-dodge <- position_dodge(0.6)
 
 for (i in seq_len(nrow(params))) {
   matrices <- matrices_csv %>%
@@ -687,11 +660,11 @@ for (i in seq_len(nrow(params))) {
   rdiffs <- rbind(
     rdiffs,
     data.frame(
-      Difference = rd[1, 1],
+      Difference = 100*rd[1, 1],
       SE = rd[1, 2],
       Comparison = "P and true G",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -701,7 +674,7 @@ for (i in seq_len(nrow(params))) {
       SE = rd[2, 2],
       Comparison = "Estimated G and true G",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -711,7 +684,7 @@ for (i in seq_len(nrow(params))) {
       SE = rd[3, 2],
       Comparison = "Estimated G and P",
       n = params[i, 1],
-      Ne = params[i, 2] * params[i, 3],
+      f = params[i, 2],
       Multicollinearity = params[i, 4],
       h = params[i, 3],
       E = params[i, 5]
@@ -724,47 +697,44 @@ levels(rdiffs$E) <- c("Independent", "Proportional", "Opposite")
 rdiffs$Heritability <- as.factor(rdiffs$h)
 rdiffs$Multicollinearity <- factor(rdiffs$Multicollinearity, levels = c("low", "medium", "high"))
 
+dodge <- position_dodge(width = 0.15)
+
 ggplot(data = rdiffs) +
-  geom_hline(aes(yintercept = 0), colour = "#000000") +
   geom_point(
     aes(
-      x = factor(Ne),
+      x = as.factor(f),
       y = Difference,
       color = Comparison,
       shape = Heritability
     ),
-    position = dodge, cex = 5
+    position = dodge, cex = 2, alpha=0.9
   ) +
   geom_errorbar(
     aes(
-      x = factor(Ne),
+      x = as.factor(f),
       y = Difference,
       ymin = Difference - (SE * 1.96),
       ymax = Difference + (SE * 1.96),
       color = Comparison
     ),
-    width = 0.2,
-    position = dodge
+    width = 0.2, position = dodge, alpha=0.9
   ) +
-  labs(y = "Response Difference (Units)", x = "Effective Sample Size") +
-  facet_grid(E ~ Multicollinearity, labeller = label_both) +
-  scale_x_discrete(labels = c(5, 15, 25, 50, 75, 250)) +
-  geom_vline(
-    xintercept = c(1.5, 2.5, 3.5, 4.5, 5.5),
-    linetype = "dashed",
-    color = "grey50"
-  ) +
-  theme_bw(base_size = 24) +
+  labs(y = "Proportional Response Difference (%)", x = "Number of Families") +
+  facet_nested(E ~ Multicollinearity + h, labeller = label_both) +
+  scale_x_discrete(labels = c(50, 150, 500)) +
+  theme_bw(base_size = 14) +
   theme(
+    panel.spacing=unit(0, "lines"),
+    panel.border=element_rect(color="grey10"),
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
     axis.ticks.x = element_blank()
   )
 
 ggsave(
-  width = 25, height = 20,
+  width = 10, height = 6,
   device = 'pdf', dpi = 500,
-  filename = "response_differences.pdf"
+  filename = "rdiffs_E_n4.pdf"
 )
 ```
 
@@ -790,7 +760,7 @@ for (i in seq_len(nrow(params))) {
   p_list <- matrices[[3]]
   
   disp <- Disparity(a_list, g_list, p_list)
-  disp <- round(disp, 2)
+  disp <- round(disp, 4)
   
   disparities <- rbind(
     disparities,
@@ -827,7 +797,69 @@ for (i in seq_len(nrow(params))) {
   )
 }
 
-write.csv(disparities, "disparity_results.csv", row.names = FALSE)
+write.csv(disparities, "disparity_results_n8_E_small_fam.csv", row.names = FALSE)
+```
+
+## Cosine similarities between leading eigenvectors
+```{r}
+columns <- c("Cosine", "SE", "Comparison", "# of Traits", "# of Families", "Heritability", "Multicollinearity", "E Type")
+cosines <- data.frame(matrix(nrow = 0, ncol = length(columns)))
+colnames(cosines) <- columns
+
+for (i in seq_len(nrow(params))) {
+  matrices <- matrices_csv %>%
+    filter(
+      n == params$n[i],
+      f == params$f[i],
+      multicoll == params$multicoll[i],
+      h == params$h[i],
+      e_type == params$e_type[i]
+    ) %>%
+    read_matrices(scale_p = FALSE, h = params$h[i], cor = F)
+  
+  a_list <- matrices[[1]]
+  g_list <- matrices[[2]]
+  p_list <- matrices[[3]]
+  
+  cos <- Cosines(a_list, g_list, p_list)
+  cos <- round(cos, 2)
+  
+  cosines <- rbind(
+    cosines,
+    data.frame(
+      Cosine = cos[1, 1],
+      SE = cos[1, 2],
+      Comparison = "P and true G",
+      `# of Traits` = params$n[i],
+      `# of Families` = params$f[i],
+      Heritability = params$h[i],
+      Multicollinearity = params$multicoll[i],
+      `E Type` = params$e_type[i]
+    ),
+    data.frame(
+      Cosine = cos[2, 1],
+      SE = cos[2, 2],
+      Comparison = "Estimated G and true G",
+      `# of Traits` = params$n[i],
+      `# of Families` = params$f[i],
+      Heritability = params$h[i],
+      Multicollinearity = params$multicoll[i],
+      `E Type` = params$e_type[i]
+    ),
+    data.frame(
+      Cosine = cos[3, 1],
+      SE = cos[3, 2],
+      Comparison = "P and estimated G",
+      `# of Traits` = params$n[i],
+      `# of Families` = params$f[i],
+      Heritability = params$h[i],
+      Multicollinearity = params$multicoll[i],
+      `E Type` = params$e_type[i]
+    )
+  )
+}
+
+write.csv(cosines, "cosine_results_n4_E_large_fam.csv", row.names = FALSE)
 ```
 
 ## Regression (Plots)
@@ -840,11 +872,17 @@ for (i in seq_len(nrow(params))) {
   matrices <- matrices_csv %>%
     filter(
       n == params$n[i],
-      f == params$f[i],
-      multicoll == params$multicoll[i],
+      f == 200,
+      multicoll == "medium",
       h == params$h[i],
       e_type == params$e_type[i]
-    ) %>%
+    ) 
+  
+  if (nrow(matrices)==0) {
+    next
+  }
+  
+  matrices <- matrices %>%
     read_matrices(scale_p = FALSE, cor = TRUE)
   
   a_matrices <- matrices[[1]]
@@ -890,21 +928,37 @@ for (i in seq_len(nrow(params))) {
 
 comparison_df$E <- factor(comparison_df$E, levels = c("ind", "sim", "opp"))
 levels(comparison_df$E) <- c("Independent", "Proportional", "Opposite")
-comparison_df$h <- factor(comparison_df$h, levels = c(0.5, 0.1))
+comparison_df$h <- factor(comparison_df$h, levels = c(0.1, 0.5))
 
-ggplot(comparison_df, aes(x = True.Genetic.Correlation, y = Estimated.Genetic.Correlation)) +
-  geom_point(aes(color = Comparison), alpha = 0.6) +
+points_df <- comparison_df %>%
+  group_by(E, n, h, Comparison) %>%
+  slice_sample(prop = 1) %>%          
+  slice_head(n = 2000) %>%     
+  ungroup()
+
+ggplot(comparison_df, aes(x = True.Genetic.Correlation,
+                          y = Estimated.Genetic.Correlation)) +
+  geom_point(data = points_df, aes(color = Comparison),
+             size = 0.5) +
   geom_smooth(method = "lm", color = "blue") +
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
-  ylim(-1, 1) +
-  facet_grid(E ~ h + Comparison, labeller = label_both) +
-  theme_bw(base_size = 17) +
-  labs(y = "Estimated G or P Correlations", x = "True G Correlations")
+  coord_cartesian(ylim = c(-1, 1)) +
+  facet_nested(E + n ~ h + Comparison, labeller = label_both) +
+  theme_bw(base_size = 11) +
+  labs(y = "Estimated G or P Correlations", x = "True G Correlations") +
+  guides(color = "none") +
+  theme(
+    panel.spacing = unit(0, "lines"),
+    panel.border = element_rect(color = "grey10"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
 
 ggsave(
-  filename = "regression_plots.pdf",
-  width = 18, height = 12,
-  device = 'pdf', dpi = 300
+  filename = "regression_plots_all.pdf",
+  width = 10, height = 8,
+  device = 'pdf'
 )
 ```
 
@@ -918,8 +972,8 @@ for (i in seq_len(nrow(params))) {
   matrices <- matrices_csv %>%
     filter(
       n == params$n[i],
-      f == params$f[i],
-      multicoll == params$multicoll[i],
+      f == 200,
+      multicoll == "medium",
       h == params$h[i],
       e_type == params$e_type[i]
     ) %>%
@@ -964,6 +1018,7 @@ regression_results <- comparison_df %>%
   group_by(n, f, h, multicoll, E, Comparison) %>%
   do({
     model <- lm(Estimated.Genetic.Correlation ~ True.Genetic.Correlation, data = .)
+    print(summary(model))
     data.frame(
       intercept = coef(model)[1],
       slope = coef(model)[2],
@@ -973,7 +1028,7 @@ regression_results <- comparison_df %>%
   }) %>%
   ungroup()
 
-write.csv(regression_results, "regression_results.csv", row.names = FALSE)
+write.csv(regression_results, "figS1_regression_results_small_fam2.csv", row.names = FALSE)
 ```
 
 ## Error proportion
@@ -1010,7 +1065,7 @@ for (i in 1:nrow(params)) {
   ratiodf <- rbind(ratiodf, data.frame(Ratio = mean_ratio, SE = se_ratio, Comparison = "F_G/F_P", `# of Traits` = params$n[i], `# of Families` = params$f[i], Heritability = params$h[i], Multicollinearity = params$multicoll[i], `E Type`=params$e_type[i]))
 }
 
-write.csv(ratiodf, "estimation_error_proportion.csv", row.names = FALSE)
+write.csv(ratiodf, "norm_small_fam.csv", row.names = FALSE)
 ```
 
 ## Response Differences (Adjustments by estimated heritability)
@@ -1033,16 +1088,16 @@ colnames(rdiffs) <- columns
 
 for (i in 1:nrow(params)) {
   # read matrices
-  matrices1 <- read.csv("matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = F)
-  matrices2 <- read.csv("matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.1)
-  matrices3 <- read.csv("matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.2)
-  matrices4 <- read.csv("matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.3)
-  matrices5 <- read.csv("matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.4)
-  matrices6 <- read.csv("matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.5)
-  matrices7 <- read.csv("matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.6)
-  matrices8 <- read.csv("matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.7)
-  matrices9 <- read.csv("matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.8)
-  matrices10 <- read.csv("matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.9)
+  matrices1 <- read.csv("large_families_matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = F)
+  matrices2 <- read.csv("large_families_matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.1)
+  matrices3 <- read.csv("large_families_matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.2)
+  matrices4 <- read.csv("large_families_matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.3)
+  matrices5 <- read.csv("large_families_matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.4)
+  matrices6 <- read.csv("large_families_matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.5)
+  matrices7 <- read.csv("large_families_matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.6)
+  matrices8 <- read.csv("large_families_matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.7)
+  matrices9 <- read.csv("large_families_matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.8)
+  matrices10 <- read.csv("large_families_matrices.csv") %>% filter(n==params[i, 1]&f==params[i, 2]&multicoll==params[i,4]&h==params[i, 3]&e_type==params[i, 5]) %>% read_matrices(scale_p = T, h=0.9)
   
   a_list <- matrices1[[1]]
   g_list <- matrices1[[2]]
@@ -1106,8 +1161,7 @@ rdiffs$Comparison <- factor(
 
 # plot data
 ggplot(data=rdiffs) +
-  geom_hline(aes(yintercept=0), colour="#000000", linewidth = 1.5) +
-  geom_point(aes(x=factor(h_guess), y=Difference), cex=7) +
+  geom_point(aes(x=factor(h_guess), y=Difference), cex=2) +
   geom_errorbar(aes(x=factor(h_guess), y=Difference, ymin=Difference-(SE*1.96), ymax=Difference+(SE*1.96)), width=.1) +
   labs(y = "Proportional Response Difference (%)", x = "Heritability Estimate Error (%)") +
    scale_x_discrete(
@@ -1119,7 +1173,7 @@ ggplot(data=rdiffs) +
     aes(yintercept = Difference),
     linetype = "dashed",
     colour   = "black",
-    linewidth = 1.5
+    linewidth = 1.0
   ) +
   geom_rect(
     data = subset(rdiffs, h_guess == 0),
@@ -1132,8 +1186,8 @@ ggplot(data=rdiffs) +
     inherit.aes = FALSE
   ) +
   facet_grid(E~Multicollinearity, labeller = label_both) +
-  theme_bw(base_size=30) +
+  theme_bw(base_size=14) +
   theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank(), axis.ticks.x = element_blank(), legend.position = "none")
 
-ggsave(width = 25, height = 20, device='pdf', dpi=500, filename = "response_diff_guess_adjustments.pdf")
+ggsave(width = 10, height = 8, device='pdf', dpi=500, filename = "rdiff_adjustments.pdf")
 ```

@@ -5,6 +5,10 @@
   a_list <- list()
   g_list <- list()
   p_list <- list()
+  
+  if(nrow(matrices_csv) == 0) {
+    return 
+  }
 
   for(i in 1:nrow(matrices_csv)){
     a <- strsplit(matrices_csv[i, "A"], split=" ")[[1]]

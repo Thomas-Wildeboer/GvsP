@@ -1,40 +1,46 @@
-MantelTests <- function(a_list, g_list, p_list, alpha = 0.05) {
-    # helper to extract p-values from MantelCor output
-    get_p <- function(res) res[2]
-
-    # A vs P
-    mantel_p <- Map(function(p, a) MantelCor(cov2cor(p), cov2cor(a)),
-                    p_list, a_list)
-    pvals_p <- unlist(lapply(mantel_p, get_p))
-
-    # A vs G
-    mantel_g <- Map(function(g, a) MantelCor(cov2cor(g), cov2cor(a)),
-                    g_list, a_list)
-    pvals_g <- unlist(lapply(mantel_g, get_p))
-
-    # P vs G
-    mantel_pg <- Map(function(g, p) MantelCor(cov2cor(g), cov2cor(p)),
-                    g_list, p_list)
-    pvals_pg <- unlist(lapply(mantel_pg, get_p))
-
-    # compute proportions and SEs
-    N <- length(pvals_p)
-    
-    prop_p  <- mean(pvals_p  < alpha)
-    prop_g  <- mean(pvals_g  < alpha)
-    prop_pg <- mean(pvals_pg < alpha)
-
-    se_p  <- sqrt(prop_p  * (1 - prop_p)  / N)
-    se_g  <- sqrt(prop_g  * (1 - prop_g)  / N)
-    se_pg <- sqrt(prop_pg * (1 - prop_pg) / N)
-
-    # return base R data.frame
-    df <- data.frame(
-        Proportion = c(prop_p, prop_g, prop_pg),
-        SE         = c(se_p,  se_g,  se_pg),
-        row.names  = c("P,A", "G,A", "P,G"),
-        stringsAsFactors = FALSE
-    )
-
-    return(df)
+MantelCors <- function(a_list, g_list, p_list) {
+  # A vs P ------------------------------------------------------------------
+  mantel_p <- map2(p_list, a_list, ~MantelCor(cov2cor(.x), cov2cor(.y), permutations=0)) # mantel cor requires correlation matrices
+  
+  cors_p <- lapply(mantel_p, function(x) x[1])
+  cors_p <- as.numeric(cors_p)
+  
+  cors_p_se <- sd(cors_p)/sqrt(length(cors_p))
+  
+  # A vs G ------------------------------------------------------------------
+  mantel_g <- map2(g_list, a_list, ~MantelCor(cov2cor(.x), cov2cor(.y), permutations=0))
+  
+  cors_g <- lapply(mantel_g, function(x) x[1])
+  cors_g <- as.numeric(cors_g)
+  
+  cors_g_se <- sd(cors_g)/sqrt(length(cors_g))
+  
+  # P vs G ------------------------------------------------------------------
+  mantel_pg <- map2(g_list, p_list, ~MantelCor(cov2cor(.x), cov2cor(.y), permutations=0))
+  
+  cors_pg <- lapply(mantel_pg, function(x) x[1])
+  cors_pg <- as.numeric(cors_pg)
+  
+  cors_pg_se <- sd(cors_pg)/sqrt(length(cors_pg))
+  
+  # create data frame of results
+  mantelcors <- data.frame(
+    c(mean(cors_p), mean(cors_g), mean(cors_pg)),
+    c(cors_p_se, cors_g_se, cors_pg_se)
+  )
+  
+  # set column names
+  colnames(mantelcors) <- c(
+    "Mean Mantel Correlation",
+    "SE"
+  )
+  
+  # set row names
+  rownames(mantelcors) <- c(
+    "P,A",
+    "G,A",
+    "P,G"
+  )
+  
+  return(mantelcors)
 }

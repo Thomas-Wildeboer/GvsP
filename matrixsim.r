@@ -238,7 +238,7 @@ function(n_traits=4, n_sires=5, dams_per_sire=3, offspring_per_dam=5, h=0.5, e_t
                 }
             } else {
                 unchanging_variables_par <-
-                    c(paste0("ANAL MUV ", n_traits), # full rank model
+                    c(paste0("ANAL MUV PC ", n_traits), # full rank model, add 'PC' after 'ANAL MUV' to specify factor analytic model
                     c("PEDS ranPed.d"),
                     c("END DATA"),
                     c("MODEL"),

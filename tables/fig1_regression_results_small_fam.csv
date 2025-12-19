@@ -1,0 +1,29 @@
+n,h,E,Comparison,slope,r_squared
+4,0.1,ind,Estimated G and true G,0.830817913,0.361632388
+4,0.1,ind,P and true G,0.100011346,0.493648383
+4,0.1,sim,Estimated G and true G,0.991371641,0.457838368
+4,0.1,sim,P and true G,0.983742514,0.980789706
+4,0.1,opp,Estimated G and true G,0.886868595,0.446472167
+4,0.1,opp,P and true G,-0.60971491,0.675499421
+4,0.5,ind,Estimated G and true G,1.018947052,0.941420607
+4,0.5,ind,P and true G,0.5012739,0.972488302
+4,0.5,sim,Estimated G and true G,1.002661705,0.948825879
+4,0.5,sim,P and true G,0.992141888,0.991686955
+4,0.5,opp,Estimated G and true G,1.023691275,0.934172485
+4,0.5,opp,P and true G,0.088100667,0.115941805
+8,0.1,ind,Estimated G and true G,0.669112008,0.205045431
+8,0.1,ind,P and true G,0.099344476,0.288303
+8,0.1,sim,Estimated G and true G,0.883470294,0.287042173
+8,0.1,sim,P and true G,0.968708558,0.948003696
+8,0.1,opp,Estimated G and true G,0.641687731,0.215906829
+8,0.1,opp,P and true G,-0.390845759,0.368680085
+8,0.5,ind,Estimated G and true G,1.022691267,0.870257594
+8,0.5,ind,P and true G,0.500088554,0.932915633
+8,0.5,sim,Estimated G and true G,1.020709921,0.867320536
+8,0.5,sim,P and true G,0.981548395,0.973139384
+8,0.5,opp,Estimated G and true G,1.018475337,0.866306485
+8,0.5,opp,P and true G,0.23460312,0.383345791
+12,0.1,ind,Estimated G and true G,0.636288833,0.164641448
+12,0.1,ind,P and true G,0.104730321,0.239937753
+12,0.5,ind,Estimated G and true G,1.084814366,0.784905977
+12,0.5,ind,P and true G,0.499807988,0.899797723
