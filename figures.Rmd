@@ -23,7 +23,7 @@ source('./util/AvgEvolvabilities.r')
 source('./util/MaxEvolvabilities.r')
 source('./util/Disparity.r')
 source('./util/MantelTests.r')
-source('./util/Cosines.r')
+source('./util/Angles.r')
 
 # return upper triangle of matrix (include diag)
 uppertriang <- function(x) {
@@ -34,7 +34,7 @@ uppertriang <- function(x) {
 matrices_csv <- read.csv("small_families_matrices.csv")
 
 # parameter combinations (adjust these to produce particular figures)
-ns <- c(8) # options: 4, 8, 12
+ns <- c(4) # options: 4, 8, 12
 fs <- c(20, 60, 200) # options: large families = {50, 150, 500}, small families = {20, 60, 200}
 hs <- c(0.1, 0.5) # options: 0.1, 0.5
 multicolls <- c("low", "medium", "high") # options: low, medium, high
@@ -634,6 +634,150 @@ ggsave(
 )
 ```
 
+```{R}
+# Compute Δ random skewer correlations = (scaled-P) - (raw-P)
+# (i.e., compare RSkewers with scale_p=TRUE vs scale_p=FALSE)
+
+columns <- c("DeltaCorrelation", "DeltaSE", "Comparison", "f", "Multicollinearity", "n", "h", "E")
+skewer_deltas <- data.frame(matrix(nrow = 0, ncol = length(columns)))
+colnames(skewer_deltas) <- columns
+
+for (i in seq_len(nrow(params))) {
+
+  # --- raw P (no scaling) ---
+  matrices_raw <- matrices_csv %>%
+    filter(
+      n == params[i, 1],
+      f == params[i, 2],
+      multicoll == params[i, 4],
+      h == params[i, 3],
+      e_type == params[i, 5]
+    ) %>%
+    read_matrices(scale_p = FALSE, h = params[i, 3])
+
+  a_raw <- matrices_raw[[1]]
+  g_raw <- matrices_raw[[2]]
+  p_raw <- matrices_raw[[3]]
+
+  skew_raw <- RSkewers(a_raw, g_raw, p_raw)  # rows: (P,Gtrue), (Gest,Gtrue), (Gest,P)
+
+  # --- scaled P (by heritability inside read_matrices) ---
+  matrices_scaled <- matrices_csv %>%
+    filter(
+      n == params[i, 1],
+      f == params[i, 2],
+      multicoll == params[i, 4],
+      h == params[i, 3],
+      e_type == params[i, 5]
+    ) %>%
+    read_matrices(scale_p = TRUE, h = params[i, 3])
+
+  a_sc <- matrices_scaled[[1]]
+  g_sc <- matrices_scaled[[2]]
+  p_sc <- matrices_scaled[[3]]
+
+  skew_sc <- RSkewers(a_sc, g_sc, p_sc)
+
+  # Differences (scaled - raw)
+  delta_corr <- skew_sc[, 1] - skew_raw[, 1]
+
+  # Simple SE propagation assuming independence:
+  # Var(diff) = Var(scaled) + Var(raw)
+  delta_se <- sqrt(skew_sc[, 2]^2 + skew_raw[, 2]^2)
+
+  skewer_deltas <- rbind(
+    skewer_deltas,
+    data.frame(
+      DeltaCorrelation = delta_corr[1],
+      DeltaSE = delta_se[1],
+      Comparison = "P and true G",
+      n = params[i, 1],
+      f = params[i, 2],
+      Multicollinearity = params[i, 4],
+      h = params[i, 3],
+      E = params[i, 5]
+    ),
+    data.frame(
+      DeltaCorrelation = delta_corr[2],
+      DeltaSE = delta_se[2],
+      Comparison = "Estimated G and true G",
+      n = params[i, 1],
+      f = params[i, 2],
+      Multicollinearity = params[i, 4],
+      h = params[i, 3],
+      E = params[i, 5]
+    ),
+    data.frame(
+      DeltaCorrelation = delta_corr[3],
+      DeltaSE = delta_se[3],
+      Comparison = "Estimated G and P",
+      n = params[i, 1],
+      f = params[i, 2],
+      Multicollinearity = params[i, 4],
+      h = params[i, 3],
+      E = params[i, 5]
+    )
+  )
+}
+
+# Factors/labels
+skewer_deltas$E <- factor(skewer_deltas$E, levels = c("ind", "sim", "opp"))
+levels(skewer_deltas$E) <- c("Independent", "Proportional", "Opposite")
+skewer_deltas$Heritability <- as.factor(skewer_deltas$h)
+skewer_deltas$Multicollinearity <- factor(skewer_deltas$Multicollinearity, levels = c("low", "medium", "high"))
+
+# Optional: only plot comparisons involving P (since scaling only affects those)
+skewer_deltas_plot <- skewer_deltas %>%
+  dplyr::filter(Comparison %in% c("P and true G", "Estimated G and P"))
+
+dodge <- position_dodge(width = 0.5)
+
+p_delta <- ggplot(data = skewer_deltas_plot) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(
+    aes(
+      x = as.factor(f),
+      y = DeltaCorrelation,
+      color = Comparison,
+      shape = Heritability
+    ),
+    position = dodge, cex = 2, alpha = 0.9
+  ) +
+  geom_errorbar(
+    aes(
+      x = as.factor(f),
+      y = DeltaCorrelation,
+      ymin = DeltaCorrelation - (DeltaSE * 1.96),
+      ymax = DeltaCorrelation + (DeltaSE * 1.96),
+      color = Comparison
+    ),
+    width = 0.2, position = dodge, alpha = 0.9
+  ) +
+  labs(
+    y = expression(Delta*" Random Skewer Correlation (scaled "*hat(P)*" - raw "*hat(P)*")"),
+    x = "Number of Families"
+  ) +
+  facet_nested(E ~ Multicollinearity + h, labeller = label_both) +
+  scale_x_discrete(labels = c(50, 150, 500)) +
+  theme_bw(base_size = 14) +
+  theme(
+    panel.spacing = unit(0, "lines"),
+    panel.border = element_rect(color = "grey10"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+
+print(p_delta)
+
+ggsave(
+  plot = p_delta,
+  width = 10, height = 6,
+  device = "pdf", dpi = 500,
+  filename = "random_skewers_delta_scaledP_minus_rawP_E_n4.pdf"
+)
+```
+
 ## Response Differences
 ```{R}
 columns <- c("Difference", "SE", "Comparison", "f", "Multicollinearity", "n", "h", "E")
@@ -800,11 +944,11 @@ for (i in seq_len(nrow(params))) {
 write.csv(disparities, "disparity_results_n8_E_small_fam.csv", row.names = FALSE)
 ```
 
-## Cosine similarities between leading eigenvectors
+## Angle between leading eigenvectors (in degrees, absolute value)
 ```{r}
-columns <- c("Cosine", "SE", "Comparison", "# of Traits", "# of Families", "Heritability", "Multicollinearity", "E Type")
-cosines <- data.frame(matrix(nrow = 0, ncol = length(columns)))
-colnames(cosines) <- columns
+columns <- c("Angle", "SE", "Comparison", "# of Traits", "# of Families", "Heritability", "Multicollinearity", "E Type")
+angles <- data.frame(matrix(nrow = 0, ncol = length(columns)))
+colnames(angles) <- columns
 
 for (i in seq_len(nrow(params))) {
   matrices <- matrices_csv %>%
@@ -821,14 +965,14 @@ for (i in seq_len(nrow(params))) {
   g_list <- matrices[[2]]
   p_list <- matrices[[3]]
   
-  cos <- Cosines(a_list, g_list, p_list)
-  cos <- round(cos, 2)
+  ang <- Angles(a_list, g_list, p_list)
+  ang <- round(ang, 2)
   
-  cosines <- rbind(
-    cosines,
+  angles <- rbind(
+    angles,
     data.frame(
-      Cosine = cos[1, 1],
-      SE = cos[1, 2],
+      Angle = ang[1, 1],
+      SE = ang[1, 2],
       Comparison = "P and true G",
       `# of Traits` = params$n[i],
       `# of Families` = params$f[i],
@@ -837,8 +981,8 @@ for (i in seq_len(nrow(params))) {
       `E Type` = params$e_type[i]
     ),
     data.frame(
-      Cosine = cos[2, 1],
-      SE = cos[2, 2],
+      Angle = ang[2, 1],
+      SE = ang[2, 2],
       Comparison = "Estimated G and true G",
       `# of Traits` = params$n[i],
       `# of Families` = params$f[i],
@@ -847,8 +991,8 @@ for (i in seq_len(nrow(params))) {
       `E Type` = params$e_type[i]
     ),
     data.frame(
-      Cosine = cos[3, 1],
-      SE = cos[3, 2],
+      Angle = ang[3, 1],
+      SE = ang[3, 2],
       Comparison = "P and estimated G",
       `# of Traits` = params$n[i],
       `# of Families` = params$f[i],
@@ -859,7 +1003,7 @@ for (i in seq_len(nrow(params))) {
   )
 }
 
-write.csv(cosines, "cosine_results_n4_E_large_fam.csv", row.names = FALSE)
+write.csv(angles, "angle_results_n4_E_small_fam.csv", row.names = FALSE)
 ```
 
 ## Regression (Plots)
