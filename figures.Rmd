@@ -34,7 +34,7 @@ uppertriang <- function(x) {
 matrices_csv <- read.csv("small_families_matrices.csv")
 
 # parameter combinations (adjust these to produce particular figures)
-ns <- c(4) # options: 4, 8, 12
+ns <- c(4, 8, 12) # options: 4, 8, 12
 fs <- c(20, 60, 200) # options: large families = {50, 150, 500}, small families = {20, 60, 200}
 hs <- c(0.1, 0.5) # options: 0.1, 0.5
 multicolls <- c("low", "medium", "high") # options: low, medium, high
@@ -1070,8 +1070,14 @@ for (i in seq_len(nrow(params))) {
   }
 }
 
-comparison_df$E <- factor(comparison_df$E, levels = c("ind", "sim", "opp"))
-levels(comparison_df$E) <- c("Independent", "Proportional", "Opposite")
+if (!all(comparison_df$E %in% c("Independent", "Proportional", "Opposite"))) {
+  comparison_df$E <- factor(comparison_df$E,
+                             levels = c("ind", "sim", "opp"),
+                             labels = c("Independent", "Proportional", "Opposite"))
+} else {
+  comparison_df$E <- factor(comparison_df$E,
+                             levels = c("Independent", "Proportional", "Opposite"))
+}
 comparison_df$h <- factor(comparison_df$h, levels = c(0.1, 0.5))
 
 points_df <- comparison_df %>%
@@ -1080,20 +1086,59 @@ points_df <- comparison_df %>%
   slice_head(n = 2000) %>%     
   ungroup()
 
+# bias/precision categories
+#   slope < 0.8  -> biased
+#   R2    < 0.5  -> imprecise
+panel_stats <- comparison_df %>%
+  dplyr::group_by(E, n, h, Comparison) %>%
+  tidyr::nest() %>%
+  dplyr::mutate(
+    fit   = purrr::map(data, ~ lm(Estimated.Genetic.Correlation ~ True.Genetic.Correlation, data = .x)),
+    slope = purrr::map_dbl(fit, ~ coef(.x)[2]),
+    r2    = purrr::map_dbl(fit, ~ summary(.x)$r.squared)
+  ) %>%
+  dplyr::select(-data, -fit) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(
+    biased    = slope < 0.8,
+    imprecise = r2 < 0.5,
+    border_color = dplyr::case_when(
+      !biased & !imprecise ~ "green4",  # unbiased and precise
+       biased & !imprecise ~ "black",   # biased but precise
+      !biased &  imprecise ~ "grey60",  # unbiased but imprecise
+      TRUE ~ NA_character_              # biased and imprecise -> no border
+    )
+  )
+
+borders <- panel_stats %>% dplyr::filter(!is.na(border_color))
+
+# guard against a category having zero matching panels
+border_layer <- function(colour_name) {
+  d <- dplyr::filter(borders, border_color == colour_name)
+  if (nrow(d) == 0) return(NULL)
+  geom_rect(
+    data = d,
+    aes(xmin = -0.93, xmax = 0.93, ymin = -0.93, ymax = 0.93),
+    fill = NA, color = colour_name, linewidth = 1.1, inherit.aes = FALSE
+  )
+}
+
 ggplot(comparison_df, aes(x = True.Genetic.Correlation,
-                          y = Estimated.Genetic.Correlation)) +
-  geom_point(data = points_df, aes(color = Comparison),
-             size = 0.5) +
-  geom_smooth(method = "lm", color = "blue") +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
-  coord_cartesian(ylim = c(-1, 1)) +
+                                y = Estimated.Genetic.Correlation)) +
+  geom_point(data = points_df, aes(color = Comparison), size = 0.5) +
+  geom_smooth(method = "lm", color = "grey30") +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey60") +
+  border_layer("green4") +
+  border_layer("black") +
+  border_layer("grey60") +
+  coord_cartesian(xlim = c(-1, 1), ylim = c(-1, 1)) +
   facet_nested(E + n ~ h + Comparison, labeller = label_both) +
   theme_bw(base_size = 11) +
   labs(y = "Estimated G or P Correlations", x = "True G Correlations") +
   guides(color = "none") +
   theme(
     panel.spacing = unit(0, "lines"),
-    panel.border = element_rect(color = "grey10"),
+    panel.border = element_rect(color = "grey20"),
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
     axis.ticks.x = element_blank()
