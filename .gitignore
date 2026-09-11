@@ -43,8 +43,5 @@ wombat_sequential
 wombat
 WOMBAT.log
 
-# Temporary files
-temp/
-
 # macOS
 .DS_Store

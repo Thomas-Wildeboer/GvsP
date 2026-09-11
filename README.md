@@ -75,7 +75,7 @@ Final manuscript tables (XLSX)
 
 ### `/temp/`
 
-Temporary files generated during WOMBAT runs. Not tracked by git. **Must be created manually before running simulations** (`mkdir temp`).
+Temporary files generated during WOMBAT runs.
 
 ## Dependencies
 
