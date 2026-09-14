@@ -32,7 +32,7 @@ Each row is one simulation replicate. Columns:
 - `h` — Heritability
 - `multicoll` — Multicollinearity level of the true G matrix (`low`, `medium`, `high`)
 - `f` — Number of families
-- `e_type` — Error covariance structure
+- `e_type` — Environmental covariance structure
 - `name` — Simulation run identifier
 
 ### Template files
@@ -60,9 +60,9 @@ CSV and XLSX outputs from the utility scripts
 
 ### `/figures/`
 
-Intermediate PDF figures organised by family structure:
+Intermediate PDF figures organised by family size:
 
-- `small_families/` — Evolvability, Krzanowski, Mantel, random skewers, R-differences, and regression plots for small family simulations
+- `small_families/` — Evolvabilities, Krzanowski correlations, Mantel correlations, random skewers, response differences, and regression plots for small family simulations
 - `large_families/` — Same plots for large family simulations
 
 ### `/ms_figures/`
@@ -85,7 +85,7 @@ Temporary files generated during WOMBAT runs.
 
 ## Acknowledgements
 
-- Dr. JL Sztepanacz (principal investigator)
+- Dr. J Sztepanacz (principal investigator)
 - Alexander MacKenzie (code to interface with WOMBAT)
 - Dr. M Videlier (helpful suggestions and discussions)
 - Dr. M Morrissey (phensim function)
